@@ -49,7 +49,8 @@ Pages on automatically for the repo.
 - "Live" means "as fresh as the last public push"; a preempted Colab cell makes the heartbeat go stale and the banner turns amber/red — by design.
 - Evaluation rows are parsed from `docs/EVAL.md`; until a held-out eval is measured, the card says **not_measured**.
 - Operator runbook card: exact restart/eval/export commands.
-- Build SHA shown in the footer (`NEXT_PUBLIC_BUILD_SHA`), 15 s stale-while-error polling, copy buttons on all digests.
+- Build SHA shown in the footer (`NEXT_PUBLIC_BUILD_SHA`), 15 s stale-while-error polling with a visible countdown, copy buttons on all digests.
+- Epoch position bar (sample X / N from the checkpoint cursor), peak-loss annotation, Open Graph card (`public/opengraph-image.png`).
 
 ## Licence
 

@@ -71,7 +71,12 @@ export interface CheckpointManifest {
   data_revision?: string;
   tier?: string;
   files?: Record<string, { bytes: number; sha256: string }>;
-  cursor?: { data_revision?: string; sample_idx?: number; consumed_tokens?: number };
+  cursor?: {
+    data_revision?: string;
+    sample_idx?: number;
+    shard_idx?: number;
+    consumed_tokens?: number;
+  };
 }
 
 export interface TrainerState {

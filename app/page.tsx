@@ -16,6 +16,7 @@ import {
   SOURCE_REPO,
   type DashboardData,
 } from "../lib/hub";
+import { useEffect, useState } from "react";
 import { usePolling } from "../lib/usePolling";
 
 const POLL_MS = 15_000;
@@ -39,6 +40,28 @@ function heartbeatAgeSeconds(heartbeat?: { utc?: string }): number | undefined {
 
 export default function DashboardPage() {
   const { data, refreshing, refresh } = usePolling<DashboardData>(loadDashboard, POLL_MS);
+
+
+  // Countdown to the next poll tick; reset whenever a refresh lands.
+  const [countdown, setCountdown] = useState(POLL_MS / 1000);
+  const fetchedAt = data?.fetchedAt;
+  useEffect(() => {
+    setCountdown(POLL_MS / 1000);
+  }, [fetchedAt]);
+  useEffect(() => {
+    const id = window.setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Peak loss and its step (for the annotation under the loss chart).
+  let peakLoss: number | undefined;
+  let peakStep: number | undefined;
+  for (const m of data?.metrics ?? []) {
+    if (typeof m.loss === "number" && (peakLoss === undefined || m.loss > peakLoss)) {
+      peakLoss = m.loss;
+      peakStep = m.global_step ?? m.step;
+    }
+  }
 
   if (!data) {
     return (
@@ -82,6 +105,11 @@ export default function DashboardPage() {
     .slice(-12)
     .reverse();
   const ts = data.trainerState;
+  const latestCheckpoint = data.checkpoints.find((c) => c.dir === data.latest) ?? data.checkpoints[0];
+  const sampleIdx = latestCheckpoint?.manifest?.cursor?.sample_idx;
+  const epochIdx = latestCheckpoint?.manifest?.cursor?.shard_idx;
+  const totalSamples = data.dataManifest?.n_train ?? 10_000;
+  const epochPct = sampleIdx !== undefined ? Math.min(100, (sampleIdx / totalSamples) * 100) : undefined;
   const cumulativeTokens = data.metrics
     .filter((m) => typeof m.consumed_tokens === "number")
     .map((m) => m.consumed_tokens as number);
@@ -129,7 +157,7 @@ export default function DashboardPage() {
             {freshnessLabel}
           </span>
           <span className="spacer" />
-          <span className="muted mono">polled {new Date(data.fetchedAt).toLocaleTimeString()}</span>
+          <span className="muted mono" title="Time since last poll">next poll in {countdown}s</span>
           <button className="refresh" onClick={refresh} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh"}
           </button>
@@ -199,6 +227,16 @@ export default function DashboardPage() {
           <div className="progress" aria-label="training progress">
             <div style={{ width: `${progress ?? 0}%` }} />
           </div>
+          {epochPct !== undefined && (
+            <div style={{ marginTop: 6 }}>
+              <div className="progress" aria-label="epoch position">
+                <div style={{ width: `${epochPct}%`, background: "linear-gradient(90deg, #a78bfa, #22d3ee)" }} />
+              </div>
+              <div className="muted mono" style={{ marginTop: 2 }}>
+                epoch {epochIdx ?? 0} position: sample {formatInt(sampleIdx)} / {formatInt(totalSamples)} ({epochPct.toFixed(1)}%) · data cursor is part of the checkpoint
+              </div>
+            </div>
+          )}
           <div className="muted mono" style={{ marginTop: 8 }}>
             LATEST → {data.latest ?? "—"} · phase {hb?.phase ?? "sft"} · status {hb?.status ?? "unknown"} · run{" "}
             {hb?.run_id ?? "—"} · loss is completion-masked SFT loss
@@ -215,7 +253,10 @@ export default function DashboardPage() {
             <Sparkline values={lossValues} color="#fb7185" label="loss per step" />
             <div style={{ height: 8 }} />
             <Sparkline values={emaValues} color="#22d3ee" label="loss EMA" />
-            <div className="muted mono" style={{ marginTop: 6 }}>pink: per-step loss · cyan: exponential moving average</div>
+            <div className="muted mono" style={{ marginTop: 6 }}>
+              pink: per-step loss · cyan: exponential moving average
+              {peakLoss !== undefined && ` · peak ${peakLoss.toFixed(4)} @ step ${peakStep}`}
+            </div>
           </Card>
           <Card title="Throughput (tok/s)" right={<span className="muted mono">wall clock of the child process</span>}>
             <Sparkline values={tokValues} color="#34d399" label="tokens per second" height={180} />
@@ -499,6 +540,9 @@ export default function DashboardPage() {
             Build: <code>{buildSha}</code> · Next.js 15 · polling every 15 s · public endpoints only.
           </p>
           <p style={{ marginBottom: 0 }}>
+            Downloads:{" "}
+            <a href={`https://huggingface.co/${MODEL_REPO}/raw/main/metrics.jsonl`}>metrics.jsonl</a> ·{" "}
+            <a href={`https://huggingface.co/${MODEL_REPO}`}>checkpoint files</a> ·{" "}
             Links: <a href={`https://github.com/${GITHUB_REPO}`}>source</a> ·{" "}
             <a href={`https://huggingface.co/${MODEL_REPO}`}>model checkpoints</a> ·{" "}
             <a href={`https://huggingface.co/datasets/${DATA_REPO}`}>dataset</a> ·{" "}
