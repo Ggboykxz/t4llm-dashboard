@@ -1,6 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  themeColor: "#070b16",
+  colorScheme: "dark",
+};
 
 const OG_IMAGE =
   "https://ggboykxz.github.io/t4llm-dashboard/opengraph-image.png";

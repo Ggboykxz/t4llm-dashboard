@@ -2,7 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-export function Card({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
+export function Card({ title, children, right }: { title: ReactNode; children: ReactNode; right?: ReactNode }) {
   return (
     <section className="card">
       <div className="chart-title">

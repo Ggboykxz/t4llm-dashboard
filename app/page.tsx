@@ -1,6 +1,8 @@
 "use client";
 
 import { AreaChart } from "../components/charts";
+import { CommandPalette } from "../components/command-palette";
+import { Stepper } from "../components/stepper";
 import { Card, CopyDigest, Kpi, Pill, Skeleton, Sparkline } from "../components/cards";
 import {
   avgTokPerSec,
@@ -44,6 +46,7 @@ export default function DashboardPage() {
 
   // Countdown to the next poll tick; reset whenever a refresh lands.
   const [countdown, setCountdown] = useState(POLL_MS / 1000);
+  const [lossTab, setLossTab] = useState<"loss" | "ema" | "grad">("loss");
   const fetchedAt = data?.fetchedAt;
   useEffect(() => {
     setCountdown(POLL_MS / 1000);
@@ -123,7 +126,6 @@ export default function DashboardPage() {
     }))
     .slice(-12)
     .reverse();
-  const ts = data.trainerState;
   const latestCheckpoint = data.checkpoints.find((c) => c.dir === data.latest) ?? data.checkpoints[0];
   const sampleIdx = latestCheckpoint?.manifest?.cursor?.sample_idx;
   const epochIdx = latestCheckpoint?.manifest?.cursor?.shard_idx;
@@ -151,6 +153,30 @@ export default function DashboardPage() {
       baseGeneralPpl: cells[6],
       regression: cells[7],
     }));
+
+  const ts = data.trainerState;
+  const evalDone = evalRows.length > 0;
+  const exportDone = Boolean(data.exportMarker?.trim());
+  const publishDone = data.modelCardText ? !/work in progress|do not use until/i.test(data.modelCardText) : false;
+  const copy = (text: string) => () => {
+    try {
+      void navigator.clipboard.writeText(text);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+  const paletteItems = [
+    { label: "Open model repo", hint: MODEL_REPO, keywords: ["model", "hf", "checkpoints"], run: () => window.open(`https://huggingface.co/${MODEL_REPO}`, "_blank", "noopener") },
+    { label: "Open data repo", hint: DATA_REPO, keywords: ["data", "dataset", "odc-by"], run: () => window.open(`https://huggingface.co/datasets/${DATA_REPO}`, "_blank", "noopener") },
+    { label: "Open source (GitHub)", hint: GITHUB_REPO, keywords: ["github", "source", "code"], run: () => window.open(`https://github.com/${GITHUB_REPO}`, "_blank", "noopener") },
+    { label: "Open source backup", hint: SOURCE_REPO, keywords: ["backup", "archive", "bundle"], run: () => window.open(`https://huggingface.co/${SOURCE_REPO}`, "_blank", "noopener") },
+    { label: "View metrics.jsonl", hint: "raw, every step", keywords: ["metrics", "logs", "jsonl"], run: () => window.open(`https://huggingface.co/${MODEL_REPO}/raw/main/metrics.jsonl`, "_blank", "noopener") },
+    { label: "View EVAL.md", hint: "held-out results", keywords: ["eval", "benchmark", "perplexity"], run: () => window.open(`https://github.com/${GITHUB_REPO}/blob/main/docs/EVAL.md`, "_blank", "noopener") },
+    { label: "Copy resume command", hint: "kill -9-safe", keywords: ["resume", "supervise", "cell"], run: copy("python -m t4llm supervise --config configs/python-sft.yaml --time-budget 20m") },
+    { label: "Copy eval command", hint: "held-out", keywords: ["eval", "held-out"], run: copy("python -m t4llm eval --config configs/python-sft.yaml --domain-set data/python-sft/heldout.jsonl") },
+    { label: "Copy export command", hint: "merged fp16 + GGUF", keywords: ["export", "gguf", "merge"], run: copy("python -m t4llm export --config configs/python-sft.yaml --train-file data/python-sft/train.jsonl") },
+    { label: "Open base model card", hint: "Qwen3-1.7B-Base · Apache-2.0", keywords: ["base", "qwen", "apache"], run: () => window.open("https://huggingface.co/Qwen/Qwen3-1.7B-Base", "_blank", "noopener") },
+  ];
   const age = heartbeatAgeSeconds(hb);
 
   const freshness =
@@ -180,6 +206,7 @@ export default function DashboardPage() {
           <button className="refresh" onClick={refresh} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh"}
           </button>
+          <CommandPalette items={paletteItems} />
         </div>
       </header>
 
@@ -285,14 +312,54 @@ export default function DashboardPage() {
         </section>
 
         <div style={{ height: 14 }} />
+        <Card
+          title="Pipeline milestones"
+          right={<Pill tone={publishDone ? "good" : "neutral"}>{publishDone ? "published" : "not yet published"}</Pill>}
+        >
+          <Stepper
+            steps={[
+              { label: "Data", state: "done", hint: "10 000 train + 500 held-out" },
+              { label: "SFT", state: hbStatus === "done" ? "done" : "current", hint: `${currentStep}/${totalSteps ?? 625} steps` },
+              { label: "Eval", state: evalDone ? "done" : "todo", hint: "held-out vs frozen base" },
+              { label: "Export", state: exportDone ? "done" : "todo", hint: exportDone ? data.exportMarker?.trim() : "merged fp16 + f16 GGUF" },
+              { label: "Publish", state: publishDone ? "done" : "todo", hint: "measured metrics only" },
+            ]}
+          />
+        </Card>
+
+        <div style={{ height: 14 }} />
         <section className="grid two">
-          <Card title="Loss" right={<span className="muted mono">{lossValues.length} steps logged</span>}>
-            <Sparkline values={lossValues} color="#fb7185" label="loss per step" />
-            <div style={{ height: 8 }} />
-            <Sparkline values={emaValues} color="#22d3ee" label="loss EMA" />
+          <Card
+            title={
+              <div className="tabs" role="tablist" aria-label="metric series">
+                {([
+                  ["loss", "Loss"],
+                  ["ema", "EMA"],
+                  ["grad", "Gradient norm"],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={lossTab === key}
+                    className={`tab ${lossTab === key ? "active" : ""}`}
+                    onClick={() => setLossTab(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
+            right={<span className="muted mono">{lossValues.length} steps</span>}
+          >
+            <Sparkline
+              values={lossTab === "loss" ? lossValues : lossTab === "ema" ? emaValues : gradValues}
+              color={lossTab === "loss" ? "#fb7185" : lossTab === "ema" ? "#22d3ee" : "#fbbf24"}
+              label="loss series"
+            />
             <div className="muted mono" style={{ marginTop: 6 }}>
-              pink: per-step loss · cyan: exponential moving average
-              {peakLoss !== undefined && ` · peak ${peakLoss.toFixed(4)} @ step ${peakStep}`}
+              {lossTab === "loss" && `per-step loss${peakLoss !== undefined ? ` · peak ${peakLoss.toFixed(4)} @ step ${peakStep}` : ""}`}
+              {lossTab === "ema" && "exponential moving average (α = 0.10)"}
+              {lossTab === "grad" && "spike > 1.5× EMA × 20 steps triggers the automatic rollback"}
             </div>
           </Card>
           <Card title="Throughput (tok/s)" right={<span className="muted mono">wall clock of the child process</span>}>
@@ -334,14 +401,6 @@ export default function DashboardPage() {
           </Card>
         </section>
 
-        <div style={{ height: 14 }} />
-        <Card title="Gradient norm" right={<span className="muted mono">{gradValues.length} steps logged</span>}>
-          <Sparkline values={gradValues} color="#fbbf24" label="gradient norm per step" height={130} />
-          <div className="muted" style={{ marginTop: 6 }}>
-            A norm spiking above 1.5× the EMA for 20 consecutive steps triggers the automatic rollback;
-            the norm trend is the early-warning signal for divergence during long runs.
-          </div>
-        </Card>
 
         <div style={{ height: 14 }} />
         <section className="grid two">

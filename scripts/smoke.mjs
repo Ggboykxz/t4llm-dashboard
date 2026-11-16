@@ -24,7 +24,7 @@ function collect(dir) {
 }
 collect(root);
 const bundle = bundleText.join("\n");
-for (const needle of ["ODC-BY-1.0", "Ggboykxz/t4llm-python-sft", "Qwen3-1.7B-Base", "not_measured", "Run health", "Gradient norm", "docs/EVAL.md", "Cumulative supervised tokens", "Runtime (from the Hub checkpoint)", "Build:", "copied", "next poll in", "epoch position"]) {
+for (const needle of ["ODC-BY-1.0", "Ggboykxz/t4llm-python-sft", "Qwen3-1.7B-Base", "not_measured", "Run health", "Gradient norm", "docs/EVAL.md", "Cumulative supervised tokens", "Runtime (from the Hub checkpoint)", "Build:", "copied", "next poll in", "epoch position", "Pipeline milestones", "Open model repo", "Gradient norm"]) {
   if (!bundle.includes(needle)) {
     console.error(`missing content in exported bundle: ${needle}`);
     process.exit(1);
