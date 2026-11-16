@@ -70,6 +70,17 @@ export default function DashboardPage() {
     .filter((m) => typeof m.grad_norm === "number")
     .map((m) => m.grad_norm as number);
 
+  const eventRows = data.metrics
+    .filter((m) => typeof m.event === "string")
+    .map((m) => ({
+      event: m.event as string,
+      step: m.step ?? m.global_step,
+      tier: m.tier,
+    }))
+    .slice(-12)
+    .reverse();
+  const ts = data.trainerState;
+
   // Parse the markdown table in docs/EVAL.md from the source repo (public raw file).
   // Lines like "| 2026-11-16T14:00:00+00:00 | run | 8 | 3.21 | 4.10 | 2.50 | 2.60 | false | 0.05 |"
   const evalRows = (data.evalText ?? "")
@@ -208,6 +219,44 @@ export default function DashboardPage() {
             the norm trend is the early-warning signal for divergence during long runs.
           </div>
         </Card>
+
+        <div style={{ height: 14 }} />
+        <section className="grid two">
+          <Card title="Run health" right={<Pill tone={(ts?.rollbacks ?? 0) > 0 ? "warn" : "good"}>{ts?.rollbacks ?? 0} rollbacks</Pill>}>
+            <dl className="mono" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 14px", margin: 0 }}>
+              <dt className="muted">run id</dt><dd style={{ margin: 0 }}>{ts?.run_id ?? hb?.run_id ?? "—"}</dd>
+              <dt className="muted">global step</dt><dd style={{ margin: 0 }}>{ts?.global_step ?? "—"} / {ts?.total_steps ?? "—"}</dd>
+              <dt className="muted">tier of latest ckpt</dt><dd style={{ margin: 0 }}>{ts?.tier ?? data.checkpoints[0]?.tier ?? "—"}</dd>
+              <dt className="muted">optimizer reset</dt><dd style={{ margin: 0 }}>{ts?.optimizer_reset ? "YES (weights-only resume)" : "no (full state restored)"}</dd>
+              <dt className="muted">OOM ladder stage</dt><dd style={{ margin: 0 }}>{ts?.oom_stage ?? 0}</dd>
+              <dt className="muted">skipped steps</dt><dd style={{ margin: 0 }}>{ts?.skipped_steps ?? 0}</dd>
+              <dt className="muted">resume divergence rollbacks</dt><dd style={{ margin: 0 }}>{ts?.rollbacks ?? 0}</dd>
+            </dl>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+              Every number above comes from the Hub-published checkpoint manifest and trainer state — not from a local guess.
+            </p>
+          </Card>
+
+          <Card title="Run events" right={<span className="muted mono">{eventRows.length} last</span>}>
+            <table>
+              <thead><tr><th>event</th><th>step</th><th>tier</th></tr></thead>
+              <tbody>
+                {eventRows.map((row, i) => (
+                  <tr key={i}>
+                    <td>{row.event}</td>
+                    <td>{row.step ?? "—"}</td>
+                    <td>{row.tier ?? "—"}</td>
+                  </tr>
+                ))}
+                {eventRows.length === 0 && <tr><td colSpan={3} className="muted">No events pushed yet.</td></tr>}
+              </tbody>
+            </table>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+              Events from <code>metrics.jsonl</code>: checkpoint writes, resumes, rollbacks, OOM ladder,
+              divergence guard. The early-warning signal for a run going wrong.
+            </p>
+          </Card>
+        </section>
 
         <div style={{ height: 14 }} />
         <section className="grid two">
