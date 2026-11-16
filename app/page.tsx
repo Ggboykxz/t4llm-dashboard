@@ -66,6 +66,26 @@ export default function DashboardPage() {
   const tokValues = data.metrics
     .filter((m) => typeof m.tok_s === "number")
     .map((m) => m.tok_s as number);
+  const gradValues = data.metrics
+    .filter((m) => typeof m.grad_norm === "number")
+    .map((m) => m.grad_norm as number);
+
+  // Parse the markdown table in docs/EVAL.md from the source repo (public raw file).
+  // Lines like "| 2026-11-16T14:00:00+00:00 | run | 8 | 3.21 | 4.10 | 2.50 | 2.60 | false | 0.05 |"
+  const evalRows = (data.evalText ?? "")
+    .split("\n")
+    .filter((line) => /^\|\s*\d{4}-\d{2}-\d{2}T/.test(line))
+    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
+    .map((cells) => ({
+      utc: cells[0],
+      run: cells[1],
+      step: cells[2],
+      domainPpl: cells[3],
+      baseDomainPpl: cells[4],
+      generalPpl: cells[5],
+      baseGeneralPpl: cells[6],
+      regression: cells[7],
+    }));
   const age = heartbeatAgeSeconds(hb);
 
   const freshness =
@@ -157,6 +177,10 @@ export default function DashboardPage() {
             LATEST → {data.latest ?? "—"} · phase {hb?.phase ?? "sft"} · status {hb?.status ?? "unknown"} · run{" "}
             {hb?.run_id ?? "—"} · loss is completion-masked SFT loss
           </div>
+          <div className="muted mono" style={{ marginTop: 4 }}>
+            last verified push {hb?.last_push_utc ? new Date(hb.last_push_utc).toLocaleString() : "—"}
+            {"  ·  "}session age {hb?.session_age_s ? `${Math.round(hb.session_age_s / 60)} min` : "—"}
+          </div>
         </section>
 
         <div style={{ height: 14 }} />
@@ -175,6 +199,15 @@ export default function DashboardPage() {
             </div>
           </Card>
         </section>
+
+        <div style={{ height: 14 }} />
+        <Card title="Gradient norm" right={<span className="muted mono">{gradValues.length} steps logged</span>}>
+          <Sparkline values={gradValues} color="#fbbf24" label="gradient norm per step" height={130} />
+          <div className="muted" style={{ marginTop: 6 }}>
+            A norm spiking above 1.5× the EMA for 20 consecutive steps triggers the automatic rollback;
+            the norm trend is the early-warning signal for divergence during long runs.
+          </div>
+        </Card>
 
         <div style={{ height: 14 }} />
         <section className="grid two">
@@ -279,12 +312,67 @@ export default function DashboardPage() {
         </section>
 
         <div style={{ height: 14 }} />
-        <Card title="Evaluation — not_measured" right={<Pill tone="warn">no benchmark yet</Pill>}>
-          <p style={{ margin: 0 }}>
-            No held-out perplexity, pass@1 or execution accuracy has been measured for this run yet.
-            When the SFT run completes, <code>t4llm eval</code> scores the adapter against the frozen
-            base on the 500-example held-out set. Until that number exists, nothing here is a
-            claim of quality — and nothing is “obviously” better than the base model.
+        {evalRows.length > 0 ? (
+          <Card
+            title="Evaluation — held-out results"
+            right={<Pill tone="good">measured</Pill>}
+          >
+            <div className="scroll-x">
+              <table>
+                <thead>
+                  <tr>
+                    <th>UTC</th><th>run</th><th>step</th><th>domain ppl</th><th>base domain ppl</th>
+                    <th>general ppl</th><th>base general ppl</th><th>regression</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {evalRows.map((row, i) => (
+                    <tr key={i}>
+                      <td className="mono">{row.utc}</td>
+                      <td className="mono">{row.run}</td>
+                      <td>{row.step}</td>
+                      <td>{row.domainPpl}</td>
+                      <td>{row.baseDomainPpl}</td>
+                      <td>{row.generalPpl}</td>
+                      <td>{row.baseGeneralPpl}</td>
+                      <td>{row.regression}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Rows read live from{" "}
+              <a href="https://github.com/Ggboykxz/t4llm/blob/main/docs/EVAL.md">docs/EVAL.md</a> in the source
+              repository, written by <code>t4llm eval</code> — never composed by the dashboard.
+            </p>
+          </Card>
+        ) : (
+          <Card title="Evaluation — not_measured" right={<Pill tone="warn">no benchmark yet</Pill>}>
+            <p style={{ margin: 0 }}>
+              No held-out perplexity, pass@1 or execution accuracy has been measured for this run yet.
+              When the SFT run completes, <code>t4llm eval</code> scores the adapter against the frozen
+              base on the 500-example held-out set and records the row in{" "}
+              <a href="https://github.com/Ggboykxz/t4llm/blob/main/docs/EVAL.md">docs/EVAL.md</a>. Until that
+              number exists, nothing here is a claim of quality — and nothing is “obviously” better than
+              the base model.
+            </p>
+          </Card>
+        )}
+
+        <div style={{ height: 14 }} />
+        <Card title="Operator runbook" right={<Pill tone="neutral">resume safely</Pill>}>
+          <div className="mono" style={{ display: "grid", gap: 6 }}>
+            <div><span className="muted"># continue the run (resumable after kill -9)</span></div>
+            <div>python -m t4llm supervise --config configs/python-sft.yaml --time-budget 20m</div>
+            <div><span className="muted"># held-out eval vs frozen base (required before any claim)</span></div>
+            <div>python -m t4llm eval --config configs/python-sft.yaml --domain-set data/python-sft/heldout.jsonl</div>
+            <div><span className="muted"># merged fp16 export + f16 GGUF, pushes to the Hub</span></div>
+            <div>python -m t4llm export --config configs/python-sft.yaml --train-file data/python-sft/train.jsonl</div>
+          </div>
+          <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+            Checkpoint cadence: weights-only every ~180 s, full every ~360 s/20 steps. The Hub is durable
+            truth; <code>LATEST</code> only moves after a complete, hash-verified upload.
           </p>
         </Card>
 

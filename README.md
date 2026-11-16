@@ -10,8 +10,9 @@ Next.js 15, static export, React 19, no back end, no database, **no tokens**. Th
 
 | Card | Source | Endpoint |
 |---|---|---|
-| Training progress, loss, tok/s, VRAM | HF model repo `Ggboykxz/t4llm-python-sft` | `raw/main/heartbeat.json`, `raw/main/metrics.jsonl` |
+| Training progress, loss, EMA, grad-norm, tok/s, VRAM | HF model repo `Ggboykxz/t4llm-python-sft` | `raw/main/heartbeat.json`, `raw/main/metrics.jsonl` |
 | Checkpoint table | HF model repo | `api/models/.../tree/main?recursive=true`, `LATEST`, `<ckpt>/manifest.json` |
+| Held-out evaluation rows | GitHub source repo | `raw.githubusercontent.com/Ggboykxz/t4llm/main/docs/EVAL.md` (table parsed; never composed) |
 | Data split + digests | HF dataset repo `Ggboykxz/t4llm-python-data` | `raw/main/MANIFEST.json`, tree |
 | Source backup pointer | HF repo `Ggboykxz/t4llm-source` | `raw/main/backup/LATEST.json` |
 | Commit feed + repo health | GitHub + HF | public REST endpoints |
@@ -44,7 +45,8 @@ Pages on automatically for the repo.
 
 - A fetch failure renders that card as an error and keeps the last good value for the rest; the page never throws.
 - "Live" means "as fresh as the last public push"; a preempted Colab cell makes the heartbeat go stale and the banner turns amber/red — by design.
-- Evaluation is shown as **not_measured** until `t4llm eval` writes a held-out row against the frozen base.
+- Evaluation rows are parsed from `docs/EVAL.md`; until a held-out eval is measured, the card says **not_measured**.
+- Operator runbook card: exact restart/eval/export commands.
 
 ## Licence
 

@@ -152,6 +152,7 @@ export interface DashboardData {
   dataManifest?: DataManifest;
   backup?: BackupLatest;
   githubRepo?: Record<string, unknown>;
+  evalText?: string;
   feed: FeedItem[];
   errors: SectionError[];
   fetchedAt: number;
@@ -286,7 +287,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   const sourceApi = `${HF_API}/api/models/${SOURCE_REPO}`;
   const raw = (repo: string, path: string) => `${HF_API}/${repo}/raw/main/${path}`;
 
-  const [heartbeat, metricsText, latestRaw, tree, trainerLatest, modelInfo, dataTree, dataManifest, backup, githubRepo, ghCommits, hfModelCommits, hfSourceCommits, hfDataCommits] =
+  const [heartbeat, metricsText, latestRaw, tree, trainerLatest, modelInfo, dataTree, dataManifest, backup, githubRepo, ghCommits, hfModelCommits, hfSourceCommits, hfDataCommits, evalText] =
     await Promise.all([
       settle("heartbeat", () => fetchJson<Heartbeat>(raw(MODEL_REPO, "heartbeat.json")), errors, 0),
       settle("metrics", () => fetchText(raw(MODEL_REPO, "metrics.jsonl")), errors, 0),
@@ -310,6 +311,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       settle("hf commits", () => fetchJson<unknown[]>(`${modelApi}/commits/main?limit=8`), errors, 60_000),
       settle("hf source commits", () => fetchJson<unknown[]>(`${sourceApi}/commits/main?limit=8`), errors, 300_000),
       settle("hf data commits", () => fetchJson<unknown[]>(`${dataApi}/commits/main?limit=8`), errors, 300_000),
+      settle("eval report", () => fetchText(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/docs/EVAL.md`), errors, 300_000),
     ]);
 
   const metrics: MetricEvent[] = [];
@@ -387,6 +389,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     dataManifest,
     backup,
     githubRepo,
+    evalText,
     feed,
     errors,
     fetchedAt: Date.now(),
