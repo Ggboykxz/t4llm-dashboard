@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 const root = new URL("../out", import.meta.url).pathname;
 const html = readFileSync(join(root, "index.html"), "utf8");
-for (const needle of ["t4llm", "Qwen3-1.7B-Base", "Loading live telemetry"]) {
+for (const needle of ["t4llm", "Qwen3-1.7B-Base", "Reading the public Hub"]) {
   if (!html.includes(needle)) {
     console.error(`missing marker in out/index.html: ${needle}`);
     process.exit(1);

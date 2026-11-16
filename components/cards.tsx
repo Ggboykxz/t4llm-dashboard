@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 export function Card({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
   return (
@@ -14,7 +14,7 @@ export function Card({ title, children, right }: { title: string; children: Reac
   );
 }
 
-export function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+export function Kpi({ label, value, sub }: { label: string; value: string; sub?: ReactNode }) {
   return (
     <div className="card">
       <h2>{label}</h2>
@@ -47,6 +47,10 @@ export function Pill({ tone, children }: { tone: "good" | "warn" | "bad" | "neut
   return <span className={cls}>{children}</span>;
 }
 
+export function Skeleton({ height = 18, width = "100%" }: { height?: number; width?: string }) {
+  return <div className="skeleton" style={{ height, width }} aria-hidden="true" />;
+}
+
 export function Sparkline({
   values,
   color = "#22d3ee",
@@ -62,6 +66,7 @@ export function Sparkline({
 }) {
   const width = 640;
   const padding = 14;
+  const gradientId = useId();
   if (values.length === 0) {
     return <div className="muted">No data points yet.</div>;
   }
@@ -78,11 +83,19 @@ export function Sparkline({
   const area = `${line} L${points[points.length - 1][0].toFixed(1)},${height - padding} L${padding},${height - padding} Z`;
   const min = Math.min(...values);
   const max = Math.max(...values);
+  const last = points[points.length - 1];
   return (
     <div>
       <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label ?? "sparkline"}>
-        <path d={area} fill={color} fillOpacity={0.12} />
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gradientId})`} />
         <path d={line} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={last[0]} cy={last[1]} r={3.6} fill={color} stroke="#070b16" strokeWidth={1.2} />
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#263056" />
       </svg>
       <div className="muted mono" style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>

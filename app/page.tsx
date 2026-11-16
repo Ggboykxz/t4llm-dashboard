@@ -1,7 +1,7 @@
 "use client";
 
 import { AreaChart } from "../components/charts";
-import { Card, CopyDigest, Kpi, Pill, Sparkline } from "../components/cards";
+import { Card, CopyDigest, Kpi, Pill, Skeleton, Sparkline } from "../components/cards";
 import {
   avgTokPerSec,
   formatBytes,
@@ -67,9 +67,15 @@ export default function DashboardPage() {
     return (
       <main className="page">
         <div className="hero">
-          <h1>t4llm — Live training dashboard</h1>
-          <p>Loading live telemetry from the public Hub…</p>
+          <h1>t4llm — live</h1>
+          <p>Reading the public Hub…</p>
         </div>
+        <div className="grid kpis" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="card"><Skeleton height={14} width="45%" /><div style={{ height: 10 }} /><Skeleton height={26} /><div style={{ height: 8 }} /><Skeleton height={10} width="60%" /></div>
+          ))}
+        </div>
+        <div className="card"><div style={{ height: 180 }}><Skeleton height={180} /></div></div>
       </main>
     );
   }
@@ -94,6 +100,19 @@ export default function DashboardPage() {
   const gradValues = data.metrics
     .filter((m) => typeof m.grad_norm === "number")
     .map((m) => m.grad_norm as number);
+
+  // Deltas over the last 10 logged steps vs the previous 10.
+  const meanOf = (xs: number[]) => xs.reduce((acc, x) => acc + x, 0) / Math.max(1, xs.length);
+  const lossTail = lossValues.slice(-10);
+  const lossPrev = lossValues.slice(-20, -10);
+  const lossDelta =
+    lossTail.length > 0 && lossPrev.length > 0 ? meanOf(lossTail) - meanOf(lossPrev) : undefined;
+  const tokTail = tokValues.slice(-10);
+  const tokPrev = tokValues.slice(-20, -10);
+  const tokDeltaPct =
+    tokTail.length > 0 && tokPrev.length > 0 && meanOf(tokPrev) > 0
+      ? ((meanOf(tokTail) - meanOf(tokPrev)) / meanOf(tokPrev)) * 100
+      : undefined;
 
   const eventRows = data.metrics
     .filter((m) => typeof m.event === "string")
@@ -185,12 +204,30 @@ export default function DashboardPage() {
           <Kpi
             label="Loss EMA"
             value={hb?.loss_ema?.toFixed(4) ?? "—"}
-            sub={lastStep?.loss != null ? `last loss ${Number(lastStep.loss).toFixed(4)}` : undefined}
+            sub={
+              <>
+                {lastStep?.loss != null ? `last loss ${Number(lastStep.loss).toFixed(4)}` : "no steps yet"}
+                {lossDelta !== undefined && (
+                  <> {"  ·  "}{lossDelta <= 0
+                    ? <span className="delta-good">▼ {Math.abs(lossDelta).toFixed(3)}</span>
+                    : <span className="delta-bad">▲ {lossDelta.toFixed(3)}</span>} vs 10 early steps</>
+                )}
+              </>
+            }
           />
           <Kpi
             label="Throughput"
             value={avgTok ? `${avgTok.toFixed(0)} tok/s` : "—"}
-            sub="mean of last 20 logged steps"
+            sub={
+              <>
+                mean of last 20 steps
+                {tokDeltaPct !== undefined && (
+                  <> {"  ·  "}{tokDeltaPct >= 0
+                    ? <span className="delta-good">▲ +{tokDeltaPct.toFixed(0)}%</span>
+                    : <span className="delta-bad">▼ {tokDeltaPct.toFixed(0)}%</span>} vs 10 earlier</>
+                )}
+              </>
+            }
           />
           <Kpi
             label="VRAM peak"
