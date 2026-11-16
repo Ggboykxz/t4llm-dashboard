@@ -69,6 +69,12 @@ td { font-variant-numeric: tabular-nums; }
 .scroll-x { overflow-x: auto; }
 .error { color: var(--bad); font-size: 12px; }
 .muted { color: var(--muted); }
+tr.latest-row td { background: rgba(34, 211, 238, 0.07); }
+.copy-btn { background: none; border: none; color: var(--accent); font-family: var(--mono); font-size: 12px; cursor: pointer; padding: 0; }
+.copy-btn:hover { text-decoration: underline; }
+.banner { border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin: 12px 0 0; font-size: 13px; }
+.banner.good { background: rgba(52, 211, 153, 0.08); border-color: rgba(52, 211, 153, 0.35); color: var(--good); }
+.banner.idle { background: rgba(251, 191, 36, 0.06); border-color: rgba(251, 191, 36, 0.3); color: var(--warn); }
 .pill { display:inline-block; border:1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 11px; color: var(--muted); }
 .pill.good { color: var(--good); border-color: rgba(52,211,153,.4); }
 .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }

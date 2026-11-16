@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 export function Card({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
   return (
@@ -21,6 +21,24 @@ export function Kpi({ label, value, sub }: { label: string; value: string; sub?:
       <div className="kpi-value">{value}</div>
       {sub ? <div className="kpi-sub">{sub}</div> : null}
     </div>
+  );
+}
+
+export function CopyDigest({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <button className="copy-btn" onClick={copy} title="Copy SHA-256">
+      {copied ? "copied ✓" : value.slice(0, 12) + "…"}
+    </button>
   );
 }
 

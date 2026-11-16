@@ -11,7 +11,9 @@ Next.js 15, static export, React 19, no back end, no database, **no tokens**. Th
 | Card | Source | Endpoint |
 |---|---|---|
 | Training progress, loss, EMA, grad-norm, tok/s, VRAM | HF model repo `Ggboykxz/t4llm-python-sft` | `raw/main/heartbeat.json`, `raw/main/metrics.jsonl` |
-| Checkpoint table | HF model repo | `api/models/.../tree/main?recursive=true`, `LATEST`, `<ckpt>/manifest.json` |
+| Checkpoint table | HF model repo | `api/models/.../tree/main?recursive=true`, `LATEST`, `<ckpt>/manifest.json` (row badge for `LATEST`, relative age, copy-to-clipboard SHA-256) |
+| Cumulative supervised tokens | HF model repo | `raw/main/metrics.jsonl` (gridline chart) |
+| Runtime (GPU, torch, CUDA, training SHA) | HF model repo | `raw/main/LATEST/env.json` + `trainer_state.json` (`runtime_notes`) |
 | Held-out evaluation rows | GitHub source repo | `raw.githubusercontent.com/Ggboykxz/t4llm/main/docs/EVAL.md` (table parsed; never composed) |
 | Data split + digests | HF dataset repo `Ggboykxz/t4llm-python-data` | `raw/main/MANIFEST.json`, tree |
 | Source backup pointer | HF repo `Ggboykxz/t4llm-source` | `raw/main/backup/LATEST.json` |
@@ -47,6 +49,7 @@ Pages on automatically for the repo.
 - "Live" means "as fresh as the last public push"; a preempted Colab cell makes the heartbeat go stale and the banner turns amber/red — by design.
 - Evaluation rows are parsed from `docs/EVAL.md`; until a held-out eval is measured, the card says **not_measured**.
 - Operator runbook card: exact restart/eval/export commands.
+- Build SHA shown in the footer (`NEXT_PUBLIC_BUILD_SHA`), 15 s stale-while-error polling, copy buttons on all digests.
 
 ## Licence
 

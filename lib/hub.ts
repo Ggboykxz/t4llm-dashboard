@@ -84,6 +84,7 @@ export interface TrainerState {
   tier?: string;
   run_id?: string;
   updated_utc?: string;
+  runtime_notes?: string[];
 }
 
 export interface DataManifest {
@@ -115,6 +116,20 @@ export interface RepoInfo {
   downloads?: number;
   likes?: number;
   private?: boolean;
+}
+
+export interface RuntimeEnv {
+  gpu_name?: string;
+  torch_version?: string;
+  cuda_version?: string;
+  compute_capability?: string;
+  sdpa?: boolean;
+  bf16_reported?: boolean;
+  vram_gib?: number;
+  python?: string;
+  platform?: string;
+  training_capable?: boolean;
+  git_sha?: string;
 }
 
 export interface CheckpointSummary {
@@ -153,6 +168,7 @@ export interface DashboardData {
   backup?: BackupLatest;
   githubRepo?: Record<string, unknown>;
   evalText?: string;
+  env?: RuntimeEnv;
   feed: FeedItem[];
   errors: SectionError[];
   fetchedAt: number;
@@ -287,7 +303,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   const sourceApi = `${HF_API}/api/models/${SOURCE_REPO}`;
   const raw = (repo: string, path: string) => `${HF_API}/${repo}/raw/main/${path}`;
 
-  const [heartbeat, metricsText, latestRaw, tree, trainerLatest, modelInfo, dataTree, dataManifest, backup, githubRepo, ghCommits, hfModelCommits, hfSourceCommits, hfDataCommits, evalText] =
+  const [heartbeat, metricsText, latestRaw, tree, trainerLatest, modelInfo, dataTree, dataManifest, backup, githubRepo, ghCommits, hfModelCommits, hfSourceCommits, hfDataCommits, evalText, runtimeEnv] =
     await Promise.all([
       settle("heartbeat", () => fetchJson<Heartbeat>(raw(MODEL_REPO, "heartbeat.json")), errors, 0),
       settle("metrics", () => fetchText(raw(MODEL_REPO, "metrics.jsonl")), errors, 0),
@@ -312,6 +328,11 @@ export async function loadDashboard(): Promise<DashboardData> {
       settle("hf source commits", () => fetchJson<unknown[]>(`${sourceApi}/commits/main?limit=8`), errors, 300_000),
       settle("hf data commits", () => fetchJson<unknown[]>(`${dataApi}/commits/main?limit=8`), errors, 300_000),
       settle("eval report", () => fetchText(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/docs/EVAL.md`), errors, 300_000),
+      settle("runtime env", async () => {
+        const latest = (await fetchText(raw(MODEL_REPO, "LATEST"))).trim();
+        if (!latest) return undefined;
+        return fetchJson<RuntimeEnv>(raw(MODEL_REPO, `${latest}/env.json`));
+      }, errors, 300_000),
     ]);
 
   const metrics: MetricEvent[] = [];
@@ -390,6 +411,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     backup,
     githubRepo,
     evalText,
+    env: runtimeEnv,
     feed,
     errors,
     fetchedAt: Date.now(),
@@ -438,4 +460,17 @@ export function formatBytes(bytes: number | undefined): string {
 export function formatInt(n: number | undefined): string {
   if (n === undefined || !Number.isFinite(n)) return "—";
   return Math.round(n).toLocaleString("en-US");
+}
+
+export function timeAgo(iso?: string): string {
+  if (!iso) return "—";
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return "—";
+  const seconds = Math.max(0, (Date.now() - ts) / 1000);
+  if (seconds < 60) return `${Math.round(seconds)}s ago`;
+  const minutes = seconds / 60;
+  if (minutes < 60) return `${Math.round(minutes)} min ago`;
+  const hours = minutes / 60;
+  if (hours < 48) return `${hours.toFixed(1)} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
 }

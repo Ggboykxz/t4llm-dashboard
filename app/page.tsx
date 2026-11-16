@@ -1,6 +1,7 @@
 "use client";
 
-import { Card, Kpi, Pill, Sparkline } from "../components/cards";
+import { AreaChart } from "../components/charts";
+import { Card, CopyDigest, Kpi, Pill, Sparkline } from "../components/cards";
 import {
   avgTokPerSec,
   formatBytes,
@@ -8,6 +9,7 @@ import {
   formatInt,
   loadDashboard,
   stepEtaSeconds,
+  timeAgo,
   DATA_REPO,
   GITHUB_REPO,
   MODEL_REPO,
@@ -80,6 +82,11 @@ export default function DashboardPage() {
     .slice(-12)
     .reverse();
   const ts = data.trainerState;
+  const cumulativeTokens = data.metrics
+    .filter((m) => typeof m.consumed_tokens === "number")
+    .map((m) => m.consumed_tokens as number);
+  const hbStatus = hb?.status ?? "unknown";
+  const buildSha = process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7) ?? "dev";
 
   // Parse the markdown table in docs/EVAL.md from the source repo (public raw file).
   // Lines like "| 2026-11-16T14:00:00+00:00 | run | 8 | 3.21 | 4.10 | 2.50 | 2.60 | false | 0.05 |"
@@ -174,7 +181,15 @@ export default function DashboardPage() {
           />
         </section>
 
-        <section className="card">
+        {hbStatus === "done" && (
+          <div className="banner good">
+            <strong>Run complete.</strong> All {totalSteps ?? 625} steps done. Next:{" "}
+            <code>t4llm eval --domain-set data/python-sft/heldout.jsonl</code>, then export.
+            The Evaluation card below fills itself from <code>docs/EVAL.md</code>.
+          </div>
+        )}
+
+        <section className="card" aria-live="polite">
           <div className="chart-title">
             <h2>Training progress</h2>
             <Pill tone={currentStep > 0 ? "good" : "warn"}>
@@ -189,7 +204,7 @@ export default function DashboardPage() {
             {hb?.run_id ?? "—"} · loss is completion-masked SFT loss
           </div>
           <div className="muted mono" style={{ marginTop: 4 }}>
-            last verified push {hb?.last_push_utc ? new Date(hb.last_push_utc).toLocaleString() : "—"}
+            last verified push {hb?.last_push_utc ? timeAgo(hb.last_push_utc) : "—"}
             {"  ·  "}session age {hb?.session_age_s ? `${Math.round(hb.session_age_s / 60)} min` : "—"}
           </div>
         </section>
@@ -208,6 +223,36 @@ export default function DashboardPage() {
               Throughput is measured by the trainer on supervised tokens; it is not a benchmark.
               Eval numbers appear only after a held-out run against the frozen base.
             </div>
+          </Card>
+        </section>
+
+        <div style={{ height: 14 }} />
+        <section className="grid two">
+          <Card
+            title="Cumulative supervised tokens"
+            right={<span className="muted mono">{formatInt(cumulativeTokens.at(-1))} total</span>}
+          >
+            <AreaChart values={cumulativeTokens} color="#22d3ee" label="supervised tokens consumed" height={180} />
+            <div className="muted" style={{ marginTop: 8 }}>
+              Supervised-completion tokens only — the gradient sees every token, but this number is what
+              the loss actually optimises. Not a benchmark.
+            </div>
+          </Card>
+          <Card title="Runtime (from the Hub checkpoint)">
+            <dl className="mono" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 14px", margin: 0 }}>
+              <dt className="muted">GPU</dt><dd style={{ margin: 0 }}>{data.env?.gpu_name ?? "—"}{data.env?.compute_capability ? ` (cc ${data.env.compute_capability})` : ""}</dd>
+              <dt className="muted">torch / CUDA</dt><dd style={{ margin: 0 }}>{data.env?.torch_version ?? "—"} / {data.env?.cuda_version ?? "—"}</dd>
+              <dt className="muted">python</dt><dd style={{ margin: 0 }}>{data.env?.python ?? "—"}</dd>
+              <dt className="muted">sdpa</dt><dd style={{ margin: 0 }}>{data.env?.sdpa ? "yes" : "unknown / no"}</dd>
+              <dt className="muted">bf16 reported</dt><dd style={{ margin: 0 }}>{data.env?.bf16_reported ? "yes (policy: fp16 only)" : "no"}</dd>
+              <dt className="muted">training-capable</dt><dd style={{ margin: 0 }}>{data.env?.training_capable ? "yes" : "unknown / no"}</dd>
+              <dt className="muted">training SHA</dt><dd style={{ margin: 0 }}>{data.env?.git_sha ? data.env.git_sha.slice(0, 7) : "—"}</dd>
+            </dl>
+            {ts?.runtime_notes && ts.runtime_notes.length > 0 && (
+              <ul className="muted" style={{ marginTop: 8, marginBottom: 0, paddingLeft: 18 }}>
+                {ts.runtime_notes.map((note, i) => <li key={i}>{note}</li>)}
+              </ul>
+            )}
           </Card>
         </section>
 
@@ -272,14 +317,20 @@ export default function DashboardPage() {
                 <tbody>
                   {data.checkpoints.map((ckpt) => {
                     const adapter = ckpt.manifest?.files?.["adapter_model.safetensors"];
+                    const isLatest = data.latest === ckpt.dir;
                     return (
-                      <tr key={ckpt.dir}>
-                        <td className="mono">{ckpt.step}</td>
+                      <tr key={ckpt.dir} className={isLatest ? "latest-row" : undefined}>
+                        <td className="mono">
+                          {ckpt.step}
+                          {isLatest && <span className="pill good" style={{ marginLeft: 6 }}>LATEST</span>}
+                        </td>
                         <td>{ckpt.tier ?? "—"}</td>
                         <td>{ckpt.files}</td>
                         <td>{formatBytes(ckpt.bytes)}</td>
-                        <td className="mono">{ckpt.created_utc ? new Date(ckpt.created_utc).toLocaleString() : "—"}</td>
-                        <td className="mono">{adapter ? adapter.sha256.slice(0, 12) + "…" : "—"}</td>
+                        <td className="mono" title={ckpt.created_utc ?? undefined}>
+                          {ckpt.created_utc ? timeAgo(ckpt.created_utc) : "—"}
+                        </td>
+                        <td>{adapter ? <CopyDigest value={adapter.sha256} /> : "—"}</td>
                       </tr>
                     );
                   })}
@@ -299,7 +350,7 @@ export default function DashboardPage() {
                   <tr key={`${item.source}-${item.sha}`}>
                     <td><Pill tone="neutral">{item.source}</Pill></td>
                     <td><a href={item.url} rel="noreferrer" target="_blank">{item.title || item.sha.slice(0, 10)}</a></td>
-                    <td className="mono">{item.date ? new Date(item.date).toLocaleString() : "—"}</td>
+                    <td className="mono" title={item.date ?? undefined}>{item.date ? timeAgo(item.date) : "—"}</td>
                   </tr>
                 ))}
                 {data.feed.length === 0 && <tr><td colSpan={3} className="muted">No commits fetched.</td></tr>}
@@ -316,8 +367,8 @@ export default function DashboardPage() {
               <dt className="muted">revision</dt><dd style={{ margin: 0 }}>{data.dataManifest?.revision?.slice(0, 12) ?? "—"}</dd>
               <dt className="muted">train / held-out</dt><dd style={{ margin: 0 }}>{data.dataManifest?.n_train ?? "—"} / {data.dataManifest?.n_heldout ?? "—"}</dd>
               <dt className="muted">split seed</dt><dd style={{ margin: 0 }}>{data.dataManifest?.split_seed ?? "—"}</dd>
-              <dt className="muted">train sha256</dt><dd style={{ margin: 0, wordBreak: "break-all" }}>{data.dataManifest?.train_sha256 ?? "—"}</dd>
-              <dt className="muted">held-out sha256</dt><dd style={{ margin: 0, wordBreak: "break-all" }}>{data.dataManifest?.heldout_sha256 ?? "—"}</dd>
+              <dt className="muted">train sha256</dt><dd style={{ margin: 0, wordBreak: "break-all" }}>{data.dataManifest?.train_sha256 ? <CopyDigest value={data.dataManifest.train_sha256} /> : "—"}</dd>
+              <dt className="muted">held-out sha256</dt><dd style={{ margin: 0, wordBreak: "break-all" }}>{data.dataManifest?.heldout_sha256 ? <CopyDigest value={data.dataManifest.heldout_sha256} /> : "—"}</dd>
             </dl>
             <p className="muted" style={{ marginTop: 8 }}>
               See <a href={`https://huggingface.co/datasets/${DATA_REPO}/blob/main/NOTICE`}>NOTICE</a> for attribution.
@@ -443,6 +494,9 @@ export default function DashboardPage() {
             t4llm-dashboard — public, read-only, no tokens, no private data. It reads the public HF
             model/dataset repos and the public GitHub repo every 15 s. “Live” means “as durable as
             the last verified Hub push”: a crashed Colab cell can be up to one push cadence stale.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            Build: <code>{buildSha}</code> · Next.js 15 · polling every 15 s · public endpoints only.
           </p>
           <p style={{ marginBottom: 0 }}>
             Links: <a href={`https://github.com/${GITHUB_REPO}`}>source</a> ·{" "}

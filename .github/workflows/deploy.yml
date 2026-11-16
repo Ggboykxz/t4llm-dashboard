@@ -33,6 +33,7 @@ jobs:
       - name: Build with the Pages base path
         env:
           NEXT_PUBLIC_BASE_PATH: /t4llm-dashboard
+          NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
         run: npm run build
       - run: npm run smoke
       - uses: actions/upload-pages-artifact@v3
