@@ -232,14 +232,48 @@ function feedFromHf(
   });
 }
 
+function readCache<T>(key: string): { t: number; v: T } | undefined {
+  try {
+    if (typeof sessionStorage === "undefined") return undefined;
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { t: number; v: T };
+    if (typeof parsed !== "object" || parsed === null || typeof parsed.t !== "number") return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCache(key: string, value: { t: number; v: unknown }): void {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // sessionStorage full or unavailable; the dashboard still works, just uncached.
+  }
+}
+
 async function settle<T>(
   label: string,
   task: () => Promise<T>,
-  errors: SectionError[]
+  errors: SectionError[],
+  ttlMs = 0
 ): Promise<T | undefined> {
+  const key = `t4llm-dash:${label}`;
+  const cached = readCache<T>(key);
+  if (cached && ttlMs > 0 && Date.now() - cached.t < ttlMs) {
+    return cached.v;
+  }
   try {
-    return await task();
+    const value = await task();
+    writeCache(key, { t: Date.now(), v: value });
+    return value;
   } catch (err) {
+    if (cached) {
+      // stale-while-error: keep the last good value instead of blanking the card
+      return cached.v;
+    }
     errors.push({ section: label, message: err instanceof Error ? err.message : String(err) });
     return undefined;
   }
@@ -254,27 +288,28 @@ export async function loadDashboard(): Promise<DashboardData> {
 
   const [heartbeat, metricsText, latestRaw, tree, trainerLatest, modelInfo, dataTree, dataManifest, backup, githubRepo, ghCommits, hfModelCommits, hfSourceCommits, hfDataCommits] =
     await Promise.all([
-      settle("heartbeat", () => fetchJson<Heartbeat>(raw(MODEL_REPO, "heartbeat.json")), errors),
-      settle("metrics", () => fetchText(raw(MODEL_REPO, "metrics.jsonl")), errors),
-      settle("LATEST", () => fetchText(raw(MODEL_REPO, "LATEST")), errors),
+      settle("heartbeat", () => fetchJson<Heartbeat>(raw(MODEL_REPO, "heartbeat.json")), errors, 0),
+      settle("metrics", () => fetchText(raw(MODEL_REPO, "metrics.jsonl")), errors, 0),
+      settle("LATEST", () => fetchText(raw(MODEL_REPO, "LATEST")), errors, 0),
       settle("checkpoint tree", () =>
         fetchJson<HubTreeFile[]>(`${modelApi}/tree/main?recursive=true`),
-        errors
+        errors,
+        30_000
       ),
       settle("trainer state", async () => {
         const latest = (await fetchText(raw(MODEL_REPO, "LATEST"))).trim();
         if (!latest) return undefined;
         return fetchJson<TrainerState>(raw(MODEL_REPO, `${latest}/trainer_state.json`));
-      }, errors),
-      settle("model repo info", () => fetchJson<RepoInfo>(modelApi), errors),
-      settle("data repo tree", () => fetchJson<HubTreeFile[]>(`${dataApi}/tree/main?recursive=true`), errors),
-      settle("data manifest", () => fetchJson<DataManifest>(raw(DATA_REPO, "MANIFEST.json")), errors),
-      settle("source backup", () => fetchJson<BackupLatest>(raw(SOURCE_REPO, "backup/LATEST.json")), errors),
-      settle("github repo", () => fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${GITHUB_REPO}`), errors),
-      settle("github commits", () => fetchJson<unknown[]>(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=8`), errors),
-      settle("hf commits", () => fetchJson<unknown[]>(`${modelApi}/commits/main?limit=8`), errors),
-      settle("hf source commits", () => fetchJson<unknown[]>(`${sourceApi}/commits/main?limit=8`), errors),
-      settle("hf data commits", () => fetchJson<unknown[]>(`${dataApi}/commits/main?limit=8`), errors),
+      }, errors, 30_000),
+      settle("model repo info", () => fetchJson<RepoInfo>(modelApi), errors, 60_000),
+      settle("data repo tree", () => fetchJson<HubTreeFile[]>(`${dataApi}/tree/main?recursive=true`), errors, 60_000),
+      settle("data manifest", () => fetchJson<DataManifest>(raw(DATA_REPO, "MANIFEST.json")), errors, 300_000),
+      settle("source backup", () => fetchJson<BackupLatest>(raw(SOURCE_REPO, "backup/LATEST.json")), errors, 300_000),
+      settle("github repo", () => fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${GITHUB_REPO}`), errors, 240_000),
+      settle("github commits", () => fetchJson<unknown[]>(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=8`), errors, 240_000),
+      settle("hf commits", () => fetchJson<unknown[]>(`${modelApi}/commits/main?limit=8`), errors, 60_000),
+      settle("hf source commits", () => fetchJson<unknown[]>(`${sourceApi}/commits/main?limit=8`), errors, 300_000),
+      settle("hf data commits", () => fetchJson<unknown[]>(`${dataApi}/commits/main?limit=8`), errors, 300_000),
     ]);
 
   const metrics: MetricEvent[] = [];
