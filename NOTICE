@@ -1,0 +1,18 @@
+t4llm
+=====
+
+t4llm — crash-only, resumable domain specialization of small LLMs on one T4.
+
+Copyright 2026 t4llm contributors. Licensed under the Apache License 2.0; see
+`LICENSE`.
+
+Third-party components
+-----------------------
+
+* Qwen3-1.7B-Base (Apache-2.0, Copyright Alibaba Cloud) — base model.
+* bigcode/self-oss-instruct-sc2-exec-filter-50k (ODC-BY-1.0) — training data of
+  `python-sft`; see the attribution requirements in the data repository.
+* llama.cpp (MIT) — GGUF converter, fetched by scripts/bootstrap.sh; not vendored
+  into this repository.
+
+No other third-party weights or datasets are distributed here.
