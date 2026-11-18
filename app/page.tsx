@@ -85,7 +85,10 @@ export default function DashboardPage() {
 
   const hb = data.heartbeat;
   const latest = hb?.step ?? data.checkpoints[0]?.step ?? 0;
-  const totalSteps = data.trainerState?.total_steps;
+  // trainerState.total_steps counts attempted optimizer steps, not the planned
+  // max (rollback/replay makes it drift). Prefer the configured max published
+  // in the heartbeat, then the checkpoint's own max, then this run's 625.
+  const totalSteps = hb?.max_steps ?? data.trainerState?.max_steps ?? 625;
   const currentStep = Math.max(latest, data.trainerState?.global_step ?? 0);
   const progress = totalSteps ? Math.min(100, (100 * currentStep) / totalSteps) : undefined;
   const eta = stepEtaSeconds(data.metrics, totalSteps);
@@ -450,7 +453,7 @@ export default function DashboardPage() {
           <Card title="Run health" right={<Pill tone={(ts?.rollbacks ?? 0) > 0 ? "warn" : "good"}>{ts?.rollbacks ?? 0} rollbacks</Pill>}>
             <dl className="mono" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 14px", margin: 0 }}>
               <dt className="muted">run id</dt><dd style={{ margin: 0 }}>{ts?.run_id ?? hb?.run_id ?? "—"}</dd>
-              <dt className="muted">global step</dt><dd style={{ margin: 0 }}>{ts?.global_step ?? "—"} / {ts?.total_steps ?? "—"}</dd>
+              <dt className="muted">global step</dt><dd style={{ margin: 0 }}>{ts?.global_step ?? "—"} / {totalSteps ?? "—"}</dd>
               <dt className="muted">tier of latest ckpt</dt><dd style={{ margin: 0 }}>{ts?.tier ?? data.checkpoints[0]?.tier ?? "—"}</dd>
               <dt className="muted">optimizer reset</dt><dd style={{ margin: 0 }}>{ts?.optimizer_reset ? "YES (weights-only resume)" : "no (full state restored)"}</dd>
               <dt className="muted">OOM ladder stage</dt><dd style={{ margin: 0 }}>{ts?.oom_stage ?? 0}</dd>

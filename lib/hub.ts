@@ -18,6 +18,7 @@ export interface Heartbeat {
   phase?: string;
   status?: string;
   step?: number;
+  max_steps?: number;
   loss_ema?: number;
   tok_s?: number;
   vram_gib?: number;
@@ -82,6 +83,7 @@ export interface CheckpointManifest {
 export interface TrainerState {
   global_step?: number;
   total_steps?: number;
+  max_steps?: number;
   rollbacks?: number;
   oom_stage?: number;
   optimizer_reset?: boolean;
