@@ -190,6 +190,20 @@ export default function DashboardPage() {
           ? `stale heartbeat (${Math.round(age!)}s ago — run preempted or idle)`
           : `stale heartbeat (${Math.round(age! / 60)} min ago — no live process)`;
 
+  // "training" only means the last process said so.  A dead heartbeat means the
+  // session ended without pushing a terminal status (hard Colab termination);
+  // never show a live ETA or a pulsing pipeline step in that state.
+  const runLive = hbStatus === "training" && freshness === "fresh";
+  const runPaused = hbStatus === "training" && freshness === "dead";
+  const runTerminal =
+    hbStatus === "stopped" ||
+    hbStatus === "interrupted" ||
+    hbStatus === "fatal" ||
+    hbStatus === "push_failed" ||
+    hbStatus === "data_exhausted";
+  const displayStatus =
+    hbStatus === "training" && !runLive ? `${hbStatus} (no live heartbeat)` : hbStatus;
+
   const commits = data.feed.length;
 
   return (
@@ -268,8 +282,8 @@ export default function DashboardPage() {
           />
           <Kpi
             label="ETA"
-            value={formatDuration(eta)}
-            sub="remaining optimizer steps × median step time"
+            value={runLive ? formatDuration(eta) : "—"}
+            sub={runLive ? "remaining optimizer steps × median step time" : "run is not live"}
           />
         </section>
 
@@ -281,11 +295,40 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {runPaused && (
+          <div className="banner idle">
+            <strong>Training is not running.</strong> Last heartbeat {timeAgo(hb?.utc)} at step{" "}
+            {formatInt(currentStep)}
+            {totalSteps ? ` / ${formatInt(totalSteps)}` : ""}; latest durable checkpoint{" "}
+            <code>{data.latest ?? "none"}</code>. The session ended without a terminal
+            status. Resume with{" "}
+            <code>python -m t4llm supervise --config configs/python-sft.yaml</code>.
+          </div>
+        )}
+
+        {runTerminal && (
+          <div className={`banner ${hbStatus === "fatal" || hbStatus === "push_failed" ? "idle" : "good"}`}>
+            <strong>Run ended: {hbStatus}.</strong> Status{" "}
+            <code>{hbStatus}</code> at step {formatInt(currentStep)}
+            {totalSteps ? ` / ${formatInt(totalSteps)}` : ""}; latest durable checkpoint{" "}
+            <code>{data.latest ?? "none"}</code>.{" "}
+            {hbStatus === "data_exhausted"
+              ? "The phase dataset was consumed before max_steps."
+              : hbStatus === "fatal" || hbStatus === "push_failed"
+                ? "Inspect the run events below before resuming."
+                : "A time-budget stop is safe: resume from the checkpoint."}
+          </div>
+        )}
+
         <section className="card" aria-live="polite">
           <div className="chart-title">
             <h2>Training progress</h2>
-            <Pill tone={currentStep > 0 ? "good" : "warn"}>
-              {currentStep > 0 ? "checkpoints durable on the Hub" : "no checkpoint yet"}
+            <Pill tone={runLive || hbStatus === "done" ? "good" : "warn"}>
+              {runPaused || runTerminal
+                ? `not live — stopped at step ${formatInt(currentStep)}`
+                : currentStep > 0
+                  ? "checkpoints durable on the Hub"
+                  : "no checkpoint yet"}
             </Pill>
           </div>
           <div className="progress" aria-label="training progress">
@@ -302,7 +345,7 @@ export default function DashboardPage() {
             </div>
           )}
           <div className="muted mono" style={{ marginTop: 8 }}>
-            LATEST → {data.latest ?? "—"} · phase {hb?.phase ?? "sft"} · status {hb?.status ?? "unknown"} · run{" "}
+            LATEST → {data.latest ?? "—"} · phase {hb?.phase ?? "sft"} · status {displayStatus} · run{" "}
             {hb?.run_id ?? "—"} · loss is completion-masked SFT loss
           </div>
           <div className="muted mono" style={{ marginTop: 4 }}>
@@ -319,7 +362,7 @@ export default function DashboardPage() {
           <Stepper
             steps={[
               { label: "Data", state: "done", hint: "10 000 train + 500 held-out" },
-              { label: "SFT", state: hbStatus === "done" ? "done" : "current", hint: `${currentStep}/${totalSteps ?? 625} steps` },
+              { label: "SFT", state: hbStatus === "done" ? "done" : runLive ? "current" : "paused", hint: runPaused || runTerminal ? `paused at ${currentStep}/${totalSteps ?? 625}` : `${currentStep}/${totalSteps ?? 625} steps` },
               { label: "Eval", state: evalDone ? "done" : "todo", hint: "held-out vs frozen base" },
               { label: "Export", state: exportDone ? "done" : "todo", hint: exportDone ? data.exportMarker?.trim() : "merged fp16 + f16 GGUF" },
               { label: "Publish", state: publishDone ? "done" : "todo", hint: "measured metrics only" },

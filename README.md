@@ -46,7 +46,7 @@ Pages on automatically for the repo.
 ## Reliability notes
 
 - A fetch failure renders that card as an error and keeps the last good value for the rest; the page never throws.
-- "Live" means "as fresh as the last public push"; a preempted Colab cell makes the heartbeat go stale and the banner turns amber/red — by design.
+- "Live" means "as fresh as the last public push"; a preempted Colab cell makes the heartbeat go stale and the banner turns amber/red — by design. When the last status is `training` but the heartbeat is dead, the page says so, suppresses the ETA, marks the SFT step paused, and shows the resume command instead of pretending the run is live.
 - Evaluation rows are parsed from `docs/EVAL.md`; until a held-out eval is measured, the card says **not_measured**.
 - Operator runbook card: exact restart/eval/export commands.
 - Build SHA shown in the footer (`NEXT_PUBLIC_BUILD_SHA`), 15 s stale-while-error polling with a visible countdown, copy buttons on all digests.

@@ -1,11 +1,11 @@
 "use client";
 
 /** Horizontal milestone stepper for the run pipeline:
- *  done (check + green) · current (pulsing ring) · todo (hollow). */
+ *  done (check + green) · current (pulsing ring) · paused (amber) · todo (hollow). */
 export function Stepper({
   steps,
 }: {
-  steps: Array<{ label: string; state: "done" | "current" | "todo"; hint?: string }>;
+  steps: Array<{ label: string; state: "done" | "current" | "paused" | "todo"; hint?: string }>;
 }) {
   return (
     <div className="stepper" role="list" aria-label="run milestones">
